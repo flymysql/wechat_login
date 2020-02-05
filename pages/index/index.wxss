@@ -1,0 +1,24 @@
+page{
+  height: 100%;
+  background-color: #fff!important;
+}
+.text-motto{
+  display: block;
+  font-size: 20px;
+  color: #456;
+  font-weight: 600;
+
+}
+
+.text-time{
+  margin-top: 10px;
+  display: block;
+  font-size: 14px;
+  color: #999;
+  font-weight: 200;
+}
+
+.refresh{
+  margin: auto;
+  margin-top: 20px;
+}
