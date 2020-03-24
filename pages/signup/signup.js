@@ -108,20 +108,24 @@ Page({
     wx.login({
       success: res => {
         wx.request({
-          url: 'http://localhost:3000/wechat_signup',
+          url: 'https://me.idealli.com/wechat_signup',
           method: 'POST',
           data: {
             nick: v.username,
             pwd: v.pwd,
             mail: v.mail,
             head_img: this.data.userInfo.avatarUrl,
-            code: res.code
+            code: res.code,
+            signcode: v.signCode
           },
           complete: function (d) {
             if (d.data == "0") {
               wx.navigateTo({
                 url: '../index/index',
               })
+            }
+            if (d.data == "2") {
+              console.log("注册码错误")
             }
           }
         })

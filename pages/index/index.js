@@ -1,42 +1,19 @@
 //index.js
 //获取应用实例
 const app = getApp()
-let socketOpen = false
-let socketMsgQueue = []
-wx.request({
-  url: 'http://me.idealli.com',
-  complete: function(d) {
-    console.log(d)
-  }
-})
-wx.connectSocket({
-  url: 'wss://webstock.idealli.com:2020',
-  header: {
-    'content-type': 'application/json'
-  },
-  //protocols: ['protocol1']
-})
-
-wx.onSocketOpen(function (res) {
-  socketOpen = true
-  for (let i = 0; i < socketMsgQueue.length; i++) {
-    sendSocketMessage(socketMsgQueue[i])
-  }
-  socketMsgQueue = []
-})
-
-
+const RSA = require('../../utils/rsa.js');
 Page({
   data: {
     StatusBar: app.globalData.StatusBar,
     CustomBar: app.globalData.CustomBar,
-    motto: '验证码过期',
+    motto: '正在获取验证码中...',
     tip: '刷新验证码',
     hasCode: false,
     userInfo: {},
     hasUserInfo: false,
     hasSignUp: true,
     time: 0,
+    pubkey: [],
     canIUse: wx.canIUse('button.open-type.getUserInfo')
   },
   //事件处理函数
@@ -72,26 +49,25 @@ Page({
         }
       })
     }
-    var that = this;
-    wx.onSocketMessage(function (res) {
-      if (res.data.length == 1) {
-        that.errSwitch(res.data);
-        return;
-      }
-      var data = res.data.split('-')
-      console.log(data)
-      if (+new Date() - Number(data[1]) < 100000) {
-        that.setData({
-          motto: data[0],
-          time: parseInt(100 - (+new Date() - Number(data[1])) / 1000),
-          hasCode: true
-        })
-        that.setTime();
-      }
-    })
   },
   onReady: function() {
-    this.toGetCode();
+    var that = this;
+    wx.request({
+      url: 'http://localhost:3000/getrsakey',
+      method: "GET",
+      complete: function (res) {
+        //var data = res.data.slice(1, res.data.length-2)
+        var n = new RSA.BigInt(res.data.n);
+        var e = new RSA.BigInt(res.data.e);
+        var m = new RSA.BigInt("12345");
+        var pubkey = [n, e];
+        that.setData({
+          pubkey: pubkey
+        })
+        that.toGetCode(pubkey);
+      }
+    })
+    
   },
   getUserInfo: function(e) {
     console.log(e)
@@ -117,25 +93,55 @@ Page({
       }, 1000);
     }
   },
-  sendSocketMessage(msg) {
-    if(socketOpen) {
-      wx.sendSocketMessage({
-        data: msg
-      })
-    } else {
-      socketMsgQueue.push(msg)
-    }
-  },
-  toGetCode(){
+  toGetCode(pubkey){
+    var that = this;
     wx.login({
       success: res => {
-      this.sendSocketMessage(res.code)
+        // 字符串编码转为assic数值
+        console.log("小程序客户端获取公钥");
+        console.log("n:", pubkey[0].toString())
+        console.log("e:", pubkey[1].toString())
+        console.log("加密前的code：", res.code)
+        var code = RSA.ToAssic(res.code, pubkey[0].toString().length);
+        console.log("字符串转数字后的code：", code);
+        var c = RSA.encrypt(code, pubkey);
+        console.log("加密后的code：", c)
+        wx.request({
+          url: 'http://localhost:3000/getcode',
+          method: "POST",
+          data: {
+            code: c
+          },
+          complete: function(res){
+            that.hasGetCode(res);
+          }
+        })
       }
     })
   },
+  hasGetCode(res){
+    var that = this;
+    console.log(res.data)
+      if (res.data.s != 0) {
+        that.errSwitch(res.data);
+        return;
+      }
+      
+      if (+new Date() - res.data.time < 100000) {
+        that.setData({
+          motto: res.data.code,
+          time: parseInt(100 - (+new Date() - res.data.time) / 1000),
+          hasCode: true
+        })
+        that.setTime();
+      }
+  },
   refreshCode(){
     if(this.data.hasSignUp) {
-      this.toGetCode();
+      this.setData({
+        motto: "正在获取验证码"
+      })
+      this.toGetCode(this.data.pubkey);
     }
     else {
       wx.navigateTo({
@@ -144,8 +150,9 @@ Page({
     }
   },
   errSwitch(err){
-    switch(err) {
-      case "1": {
+    var s = err.s;
+    switch(s) {
+      case 1: {
         this.setData({
           hasSignUp: false,
           motto: "非注册用户",
